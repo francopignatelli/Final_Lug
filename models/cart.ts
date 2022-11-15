@@ -1,4 +1,18 @@
-import {model, Schema, SchemaType} from "mongoose"
+import {model, Schema, Types} from "mongoose"
+
+interface IPopulatedItem{
+    item: {
+        name: String,
+        price: number,
+        amount: number
+    },
+    amount: number                 
+}
+
+interface IItem{
+    item: Types.ObjectId,
+    amount: number
+}
 
 const cartSchema = new Schema({
     total: {type: Number, default: 0},
@@ -9,6 +23,8 @@ const cartSchema = new Schema({
         }
     ]
 })
+const CartModel = model('cart', cartSchema)
 
-export default model('cart', cartSchema)
+
+export { CartModel, IPopulatedItem, IItem }
 //Trasfroma el Schema en algo con lo que podemos trabajar en el codigo

@@ -1,12 +1,11 @@
 import { Request, Response } from "express"
-import { ObjectId, Types } from "mongoose"
-import CartModel from "../models/cart"  //Importacion del modelo
+import {CartModel, IPopulatedItem, IItem} from "../models/cart"  //Importacion del modelo
 import ItemModel from "../models/item"
 
-interface Item{
-    item: Types.ObjectId,
-    amount: number
-}
+//cart.items[i].item --> ObjId
+// Mongoose --> cart.items.0.item --> 1er ObjId
+// Mongoose --> cart.items.item --> Le apunto a todos (Todos los "item" dentro de items)
+
 
 export default {
     getCarts: async (req: Request, res: Response) => {
@@ -20,18 +19,22 @@ export default {
     },
     
     createCart: async (req: Request, res: Response) => {
-        const {items} = req.body    // {} -> Extraigo lo que me importa del body
+        const {items}:{items:IItem[]} = req.body    // {} -> Extraigo lo que me importa del body
         const cart = new CartModel()
         cart.total = 0
         
         for (let index = 0; index < items.length; index++) {
             const cartItem = items[index];
             const item = await ItemModel.findById(cartItem.item)
+            const cartItemAmount = cartItem.amount
             if (!item) {
-                await cart.save()
-                res.send("El carrito se ha creado exitosamente.")
+                continue
+            }
+            if (cartItemAmount > item.amount) {
+                res.status(400).send("La cantidad del item ingresada es invalida.")
                 return
             }
+            cart.items.push({item: item._id, amount: cartItemAmount})
             cart.total += item.price * cartItem.amount
         }
         await cart.save()
@@ -43,7 +46,7 @@ export default {
         try {
             const {cartId} = req.params
             const cart = await CartModel.findById(cartId)
-            const {items}:{items:Item[]} = req.body    //Aray de item (Inteface)
+            const {items}:{items:IItem[]} = req.body    //Aray de item (Inteface)
 
             if (!cart) {
                 res.status(400).send("El carrito ingresado es inválido.")
@@ -83,11 +86,14 @@ export default {
                 }
             } 
 
+            //Populo el carrito para traerme todos los "item" [cart.items.item]
+            //                      propiedad primera
+            const populatedCart = await cart.populate<{ items: IPopulatedItem[] }>('items.item')
+
             //Calculo del total
-            for (let i = 0; i < cart.items.length; i++) {
-                const cartItem = cart.items[i];
-                const item = await ItemModel.findById(cartItem.item)
-                cart.total += item!.price * cartItem.amount     //! Propiedad no null
+            for (let i = 0; i < populatedCart.items.length; i++) {
+                const cartItem = populatedCart.items[i];
+                cart.total += cartItem.item.price * cartItem.amount    //! Propiedad no null
             }
 
             await cart.save()
@@ -110,7 +116,7 @@ export default {
             const {cartId} = req.params
             const cart = await CartModel.findById(cartId)
 
-            const {items}:{items:Item[]} = req.body
+            const {items}:{items:IItem[]} = req.body
 
             //Checkeo si el carrito del params es valido
             if (!cart) {
@@ -135,6 +141,14 @@ export default {
                     res.status(400).send("El item/s que quiere eliminar no esta en el carrito")
                 }
             }
+            
+            const populatedCart = await cart.populate<{ items: IPopulatedItem[] }>('items.item')
+
+            for (let i = 0; i < populatedCart.items.length; i++) {
+                const cartItem = populatedCart.items[i];
+                cart.total += cartItem.item.price * cartItem.amount    //! Propiedad no null
+            }
+
             await cart.save()
             res.status(200).send("El item/s se han removido correctamente.")
 
